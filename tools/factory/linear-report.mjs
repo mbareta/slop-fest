@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Posts an agent-run update to the Linear ticket.
 //
-//   node linear-report.mjs --ticket ENG-123 --kind plan|pr|failed|needs-human|blocked \
+//   node linear-report.mjs --ticket STU-123 --kind plan|pr|failed|needs-human|blocked \
 //     [--file path] [--url <pr url>] --run-url <url>
 //
 // plan        : posts the plan (--file) for the product owner to approve

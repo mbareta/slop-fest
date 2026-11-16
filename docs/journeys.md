@@ -5,6 +5,7 @@ Happy path only, unless QA asks for edge or regression cases.
 
 | ID | Journey | Spec |
 |----|---------|------|
-| tenant-isolation | Two tenants never see each other's data (permanent) | `e2e/journeys/tenant-isolation.spec.ts` |
+| health | The app boots, renders the home page and reaches its database | `e2e/journeys/health.spec.ts` |
+| tenant-isolation | Two tenants never see each other's data (permanent) | added with the test harness (sign-in seam, seeding, fixture server) |
 
 <!-- Add a row when a ticket introduces a new journey. -->

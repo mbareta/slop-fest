@@ -18,7 +18,7 @@ permissions:
   actions: write # needed for `gh workflow run`
 
 env:
-  TEAM_KEY: ${{ vars.LINEAR_TEAM_KEY || 'ENG' }}
+  TEAM_KEY: ${{ vars.LINEAR_TEAM_KEY || 'STU' }}
 
 jobs:
   poll:
@@ -54,7 +54,7 @@ jobs:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           LIMIT: ${{ steps.budget.outputs.limit }}
         run: |
-          # Prints a JSON array of issue IDs, e.g. ["ENG-12","ENG-15"]
+          # Prints a JSON array of issue IDs, e.g. ["STU-12","STU-15"]
           tickets=$(node tools/factory/linear-poll.mjs --limit "$LIMIT")
           echo "tickets=$tickets" >> "$GITHUB_OUTPUT"
 

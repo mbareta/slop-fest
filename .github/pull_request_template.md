@@ -1,4 +1,4 @@
-<!-- Title must start with the Linear ID, e.g. "ENG-123: Add Stripe connector" -->
+<!-- Title must start with the Linear ID, e.g. "STU-123: Add Stripe connector" -->
 
 Ticket: <!-- Linear link -->
 

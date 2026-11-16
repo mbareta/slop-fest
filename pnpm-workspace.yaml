@@ -2,4 +2,7 @@ packages:
   - apps/*
   - packages/*
   - packages/connectors/*
-  - e2e
+
+# Packages allowed to run install scripts (pnpm blocks the rest).
+onlyBuiltDependencies:
+  - esbuild

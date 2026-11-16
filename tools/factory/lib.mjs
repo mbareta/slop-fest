@@ -85,7 +85,7 @@ export async function linear(query, variables = {}) {
 }
 
 export function teamKey() {
-  return process.env.TEAM_KEY || 'ENG';
+  return process.env.TEAM_KEY || 'STU';
 }
 
 export function assertTicketId(id) {

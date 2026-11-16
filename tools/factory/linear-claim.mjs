@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Claims a Linear ticket for an agent run and writes the agent's context.
 //
-//   node linear-claim.mjs --ticket ENG-123 --mode small|plan|build|fix \
+//   node linear-claim.mjs --ticket STU-123 --mode small|plan|build|fix \
 //     [--pr 42 --run-id 123456] --run-url <url> --default-branch main
 //
 // small       : ticket must be in Todo and still labelled agent-ok, else skipped=true.
@@ -51,6 +51,7 @@ const { issue } = await linear(
 if (!issue) fail(`Ticket not found: ${ticket}`);
 
 const labels = issue.labels.nodes.map((l) => l.name);
+// eslint-disable-next-line no-control-regex -- strip control characters on purpose
 const title = issue.title.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 120);
 
 function skip(reason) {
@@ -83,6 +84,7 @@ if (mode === 'fix') {
 
   const log = gh(['run', 'view', args['run-id'], '--log-failed']);
   // Strip ANSI codes and keep the tail, where the errors usually are.
+  // eslint-disable-next-line no-control-regex -- strip ANSI colour codes on purpose
   const lines = log.replace(/\u001b\[[0-9;]*m/g, '').split('\n');
   failureLog = lines.slice(-MAX_LOG_LINES).join('\n');
 } else {
