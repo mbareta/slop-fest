@@ -1,0 +1,14 @@
+{
+  "name": "slop-fest",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "echo 'typecheck: no TypeScript packages yet (added with the app skeleton)'",
+    "lint": "echo 'lint: no linter configured yet (added with the app skeleton)'",
+    "e2e": "echo 'e2e: no journeys yet (Playwright harness comes after the app skeleton)'"
+  }
+}

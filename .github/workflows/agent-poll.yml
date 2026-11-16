@@ -1,0 +1,74 @@
+name: Agent poll
+
+# Looks for small tickets (label agent-ok, state Todo) in Linear and starts one
+# agent-run per ticket. No AI and no repo code runs here. Swap this workflow for
+# a webhook relay later without touching agent-run.yml.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: agent-poll
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write # needed for `gh workflow run`
+
+env:
+  TEAM_KEY: ${{ vars.LINEAR_TEAM_KEY || 'ENG' }}
+
+jobs:
+  poll:
+    # Kill switch: set repository variable AGENTS_ENABLED=true to enable.
+    if: vars.AGENTS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Work out how many runs we may start
+        id: budget
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DAILY_CAP: ${{ vars.AGENT_DAILY_CAP || '10' }}
+          PER_POLL: ${{ vars.AGENT_MAX_PER_POLL || '2' }}
+        run: |
+          used=$(gh run list --workflow agent-run.yml --created ">=$(date -u +%F)" \
+            --limit 200 --json databaseId --jq 'length')
+          remaining=$(( DAILY_CAP - used ))
+          limit=$(( remaining < PER_POLL ? remaining : PER_POLL ))
+          if [ "$limit" -lt 0 ]; then limit=0; fi
+          echo "runs today: $used, cap: $DAILY_CAP, starting up to: $limit"
+          echo "limit=$limit" >> "$GITHUB_OUTPUT"
+
+      - name: Find eligible tickets
+        id: find
+        if: steps.budget.outputs.limit != '0'
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          LIMIT: ${{ steps.budget.outputs.limit }}
+        run: |
+          # Prints a JSON array of issue IDs, e.g. ["ENG-12","ENG-15"]
+          tickets=$(node tools/factory/linear-poll.mjs --limit "$LIMIT")
+          echo "tickets=$tickets" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch agent runs
+        if: steps.budget.outputs.limit != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TICKETS: ${{ steps.find.outputs.tickets }}
+        run: |
+          for t in $(jq -r '.[]' <<<"$TICKETS"); do
+            if [[ "$t" =~ ^${TEAM_KEY}-[0-9]+$ ]]; then
+              echo "Dispatching $t"
+              gh workflow run agent-run.yml -f ticket="$t" -f mode=small
+            else
+              echo "::warning::Skipping unexpected ticket id: $t"
+            fi
+          done

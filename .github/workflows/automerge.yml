@@ -1,0 +1,94 @@
+name: Auto-merge
+
+# Enables GitHub's native auto-merge on eligible agent PRs. GitHub then merges
+# only when every required check is green (PR checks "checks" + CircleCI security).
+#
+# Off by default: set repository variable AUTOMERGE_ENABLED=true after the
+# baseline period. Requires "Allow auto-merge" in repository settings.
+#
+# This workflow runs scripts from the BASE branch and reads the PR's file list
+# via the API, so PR code is never executed here.
+
+on:
+  pull_request:
+    types: [opened, labeled, synchronize, ready_for_review]
+
+concurrency:
+  group: automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  enable:
+    if: >-
+      vars.AUTOMERGE_ENABLED == 'true' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'agent-ok') &&
+      github.event.pull_request.user.login == format('{0}[bot]', vars.AGENT_APP_SLUG)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Daily cap on auto-merged PRs
+        id: cap
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          CAP: ${{ vars.AUTOMERGE_DAILY_CAP || '10' }}
+        run: |
+          merged=$(gh pr list --repo "$REPO" --label agent-ok --state merged \
+            --search "merged:>=$(date -u +%F)" --json number --jq 'length')
+          echo "auto-merged today: $merged, cap: $CAP"
+          if [ "$merged" -ge "$CAP" ]; then
+            echo "reached=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Independent guard check
+        id: guard
+        if: steps.cap.outputs.reached != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh api "repos/$REPO/pulls/$PR/files" --paginate \
+            --jq '[.[] | {path: .filename, additions: .additions, deletions: .deletions, status: .status}]' \
+            | jq -s 'add' > "$RUNNER_TEMP/files.json"
+          if node tools/factory/size-guard.mjs --mode small --files-json "$RUNNER_TEMP/files.json" > guard.txt 2>&1; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            cat guard.txt
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Enable auto-merge
+        if: steps.guard.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: gh pr merge "$PR" --repo "$REPO" --auto --squash
+
+      - name: Hand over to a human (guard failed or cap reached)
+        if: steps.cap.outputs.reached == 'true' || steps.guard.outputs.ok == 'false'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh pr edit "$PR" --repo "$REPO" --remove-label agent-ok --add-label needs-human
+          gh pr comment "$PR" --repo "$REPO" \
+            --body "Not eligible for auto-merge (daily cap reached or small-ticket guard failed). Needs human review."

@@ -1,0 +1,66 @@
+name: Agent fix dispatcher
+
+# When "PR checks" fails on an agent-authored PR, start agent-run in fix mode.
+# Capped at 2 attempts (labels agent-fix-1, agent-fix-2), then the PR is
+# handed to a human with the needs-human label.
+#
+# Not covered yet: failures of CircleCI security checks. They are not GitHub
+# Actions runs, so this trigger cannot see them. Add a check_run-based trigger
+# plus a CircleCI API token when you want agents to fix those too.
+
+on:
+  workflow_run:
+    workflows: ['PR checks']
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: write
+  pull-requests: write
+
+env:
+  TEAM_KEY: ${{ vars.LINEAR_TEAM_KEY || 'ENG' }}
+
+jobs:
+  dispatch:
+    if: >-
+      vars.AGENTS_ENABLED == 'true' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Decide and dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          pr_json=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+            --json number,labels --jq '.[0]')
+          if [ -z "$pr_json" ] || [ "$pr_json" = "null" ]; then echo "No open PR"; exit 0; fi
+
+          pr=$(jq -r '.number' <<<"$pr_json")
+          labels=$(jq -r '.labels[].name' <<<"$pr_json")
+
+          grep -qx 'agent-authored' <<<"$labels" || { echo "Not an agent PR"; exit 0; }
+          grep -qx 'needs-human'    <<<"$labels" && { echo "Already with a human"; exit 0; }
+
+          if grep -qx 'agent-fix-2' <<<"$labels"; then
+            gh pr edit "$pr" --repo "$REPO" --add-label needs-human
+            gh pr comment "$pr" --repo "$REPO" \
+              --body "Agent made 2 fix attempts and checks are still failing. Handing over to a human."
+            exit 0
+          fi
+
+          next=agent-fix-1
+          if grep -qx 'agent-fix-1' <<<"$labels"; then next=agent-fix-2; fi
+
+          ticket=$(grep -oiE "${TEAM_KEY}-[0-9]+" <<<"$BRANCH" | head -1 | tr '[:lower:]' '[:upper:]')
+          [ -n "$ticket" ] || { echo "::warning::No ticket id in branch name"; exit 0; }
+
+          gh pr edit "$pr" --repo "$REPO" --add-label "$next"
+          gh workflow run agent-run.yml --repo "$REPO" \
+            -f ticket="$ticket" -f mode=fix -f pr="$pr" -f run_id="$RUN_ID"

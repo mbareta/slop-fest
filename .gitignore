@@ -1,0 +1,28 @@
+# OS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Dependencies and builds
+node_modules/
+dist/
+.next/
+out/
+*.tsbuildinfo
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Tests
+playwright-report/
+test-results/
+coverage/
+
+# Agent runs (workflow scratch space)
+.agent-run/
+
+# Logs
+*.log

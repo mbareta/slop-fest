@@ -1,0 +1,16 @@
+# Protected paths: changes need review from an owner (enforced by branch
+# protection "Require review from Code Owners"). Keep in sync with
+# tools/factory/guard.config.json and the list in CLAUDE.md.
+#
+# Paths that don't exist yet are placeholders for the app skeleton; update them
+# when the real auth / data-access / migrations / sign-in seam locations land.
+
+/.github/                         @mbareta
+/.circleci/                       @mbareta
+/tools/factory/                   @mbareta
+/infra/                           @mbareta
+/CLAUDE.md                        @mbareta
+/apps/web/src/auth/               @mbareta
+/packages/db/src/tenant/          @mbareta
+/packages/db/migrations/          @mbareta
+/e2e/support/sign-in.ts           @mbareta

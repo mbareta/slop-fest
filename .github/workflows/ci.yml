@@ -1,0 +1,130 @@
+name: PR checks
+
+# Required check for branch protection: "checks" (the aggregator job at the bottom).
+# CircleCI security checks are separate required status checks.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TEAM_KEY: ${{ vars.LINEAR_TEAM_KEY || 'ENG' }}
+
+jobs:
+  # Policy checks run scripts from the BASE branch (never from the PR), so a PR
+  # cannot weaken the checks that judge it. File lists come from the API.
+  policy:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Ticket ID in branch name and PR title
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          shopt -s nocasematch
+          [[ "$PR_TITLE" =~ ^${TEAM_KEY}-[0-9]+ ]] || {
+            echo "::error::PR title must start with a Linear ID like ${TEAM_KEY}-123"; exit 1; }
+          [[ "$HEAD_REF" =~ (^|/)${TEAM_KEY}-[0-9]+ ]] || {
+            echo "::error::Branch name must contain a Linear ID like ${TEAM_KEY}-123"; exit 1; }
+
+      - name: List changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api "repos/${{ github.repository }}/pulls/$PR/files" --paginate \
+            --jq '[.[] | {path: .filename, additions: .additions, deletions: .deletions, status: .status}]' \
+            | jq -s 'add' > "$RUNNER_TEMP/files.json"
+
+      - name: Docs check (touching an integration requires touching its doc)
+        run: node tools/factory/docs-check.mjs --files-json "$RUNNER_TEMP/files.json"
+
+      - name: Small-ticket guard (only when labelled agent-ok)
+        if: contains(github.event.pull_request.labels.*.name, 'agent-ok')
+        run: node tools/factory/size-guard.mjs --mode small --files-json "$RUNNER_TEMP/files.json"
+
+  static:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+
+  e2e:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # Single required status check. Skipped jobs (draft PRs) leave this skipped,
+  # which keeps the PR unmergeable until it is ready for review.
+  checks:
+    if: always() && github.event.pull_request.draft == false
+    needs: [policy, static, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job did not succeed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          if echo "$RESULTS" | grep -Eq '"(failure|cancelled|skipped)"'; then exit 1; fi
