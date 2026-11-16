@@ -137,6 +137,7 @@ const md = `# ${ticket}: ${title}
 - URL: ${issue.url}
 - State: ${issue.state.name}
 - Labels: ${labels.join(', ') || 'none'}
+- Default branch: ${args['default-branch']}
 ${mode === 'fix' ? `- PR: #${args.pr} (branch \`${branch}\`)\n- Failed checks log: .agent-run/failure.log\n` : ''}
 ---
 
