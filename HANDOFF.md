@@ -23,7 +23,7 @@ CEO (reads Linear and a weekly digest only), product owner (writes tickets, sets
 Five workflows in `.github/workflows/`: `ci.yml`, `agent-poll.yml`, `agent-run.yml`, `agent-fix.yml`, `automerge.yml`.
 
 ## To write next
-1. Guardrails: branch protection (required checks: `checks` + CircleCI jobs), CODEOWNERS, labels (`agent-ok`, `agent-authored`, `needs-human`, `agent-fix-1`, `agent-fix-2`), GitHub App for the agent, repo variables/secrets (see workflow headers: `AGENTS_ENABLED`, `AUTOMERGE_ENABLED`, `LINEAR_TEAM_KEY`, `AGENT_APP_ID`, `AGENT_APP_SLUG`; secrets `ANTHROPIC_API_KEY`, `LINEAR_API_KEY`, `AGENT_APP_PRIVATE_KEY`).
+1. Guardrails: branch protection (required checks: `checks` + CircleCI jobs), CODEOWNERS, labels (`agent-ok`, `agent-authored`, `needs-human`, `agent-fix-1`, `agent-fix-2`), GitHub App for the agent, repo variables/secrets (see workflow headers: `AGENTS_ENABLED`, `AUTOMERGE_ENABLED`, `LINEAR_TEAM_KEY`, `AGENT_APP_CLIENT_ID`, `AGENT_APP_SLUG`; secrets `ANTHROPIC_API_KEY`, `LINEAR_API_KEY`, `AGENT_APP_PRIVATE_KEY`).
 2. `tools/factory/` (plain Node ESM, zero dependencies, built-in fetch):
    - `linear-poll.mjs`: print JSON array of eligible ticket IDs (label `agent-ok`, state Todo).
    - `linear-claim.mjs`: claim ticket (Todo to In Progress, comment run link), write `.agent-run/ticket.md`; step outputs `skipped`, `branch`, `base_ref`, `title`, `url`; in fix mode fetch the failed run's log instead.

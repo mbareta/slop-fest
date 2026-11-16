@@ -24,9 +24,9 @@ under "When you must stop".
   `pnpm e2e` (optionally with a spec path).
 - Don't add, remove or upgrade dependencies. If the work needs a new package,
   stop and say so.
-- There is no network access apart from Postgres at `DATABASE_URL`. Don't try to
-  reach outside APIs. Connectors read `SOURCE_API_URL`, which tests point at a
-  fixture server.
+- Don't access the network beyond Postgres at `DATABASE_URL`. Don't call
+  outside APIs, even though the runner could reach them. Connectors read
+  `SOURCE_API_URL`, which tests point at a fixture server.
 - Don't push and don't open PRs. Later steps do that. Commit locally when you're
   done.
 - `.agent-run/` is ignored by git. Write scratch notes there, never in the repo.

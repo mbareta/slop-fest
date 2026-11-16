@@ -13,6 +13,12 @@ on:
     workflows: ['PR checks']
     types: [completed]
 
+# One dispatcher at a time per branch, so two quick failures can't both read
+# the same attempt label and start the same attempt twice.
+concurrency:
+  group: agent-fix-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   actions: write
@@ -50,6 +56,7 @@ jobs:
 
           if grep -qx 'agent-fix-2' <<<"$labels"; then
             gh pr edit "$pr" --repo "$REPO" --add-label needs-human
+            gh pr merge "$pr" --repo "$REPO" --disable-auto || true
             gh pr comment "$pr" --repo "$REPO" \
               --body "Agent made 2 fix attempts and checks are still failing. Handing over to a human."
             exit 0

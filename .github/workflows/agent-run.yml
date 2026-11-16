@@ -64,8 +64,8 @@ jobs:
       title: ${{ steps.claim.outputs.title }}
       url: ${{ steps.claim.outputs.url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -101,7 +101,7 @@ jobs:
             --ticket "$TICKET" --mode "$MODE" --pr "$PR" --run-id "$RUN_ID" \
             --run-url "$RUN_URL" --default-branch "$DEFAULT_BRANCH"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.claim.outputs.skipped == 'false'
         with:
           name: ticket
@@ -137,7 +137,7 @@ jobs:
       TOOLS_CODE: 'Read,Glob,Grep,Edit,Write,Bash(git add:*),Bash(git commit:*),Bash(git status:*),Bash(git diff:*),Bash(pnpm install),Bash(pnpm typecheck),Bash(pnpm lint),Bash(pnpm e2e:*)'
       TOOLS_PLAN: 'Read,Glob,Grep,Write'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.base_ref }}
           fetch-depth: 0
@@ -151,28 +151,31 @@ jobs:
           echo ".agent-run/" >> .git/info/exclude
           mkdir -p .agent-run/out
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ticket
           path: .agent-run
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - name: Install Playwright browser (once the e2e harness exists)
+        run: if [ -x node_modules/.bin/playwright ]; then pnpm exec playwright install --with-deps chromium; fi
 
       - name: Record base commit
         run: git rev-parse HEAD > .agent-run/out/base_sha
 
-      # NOTE: verify input and output names against the action's current README.
-      # The read-only github.token is deliberate. If the action insists on
-      # OIDC, add `id-token: write` to this job's permissions.
+      # Inputs/outputs verified against claude-code-action v1.0.276 action.yml.
+      # github_token is the read-only job token on purpose: passing it skips the
+      # action's OIDC exchange for a writable Claude App token.
+      # --permission-mode default makes --allowedTools a strict list. (The
+      # action's default "auto" mode lets a safety review approve other tools.)
       - name: Run agent
         id: agent
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
@@ -185,32 +188,44 @@ jobs:
           claude_args: |
             --model ${{ env.MODEL }}
             --max-turns ${{ env.MAX_TURNS }}
+            --permission-mode default
             --allowedTools "${{ inputs.mode == 'plan' && env.TOOLS_PLAN || env.TOOLS_CODE }}"
             --disallowedTools "WebFetch,WebSearch"
 
-      - name: Collect output (plan mode)
-        if: inputs.mode == 'plan'
+      # The agent signals "I need a human" by writing .agent-run/blocked.md.
+      # Its partial changes are then discarded.
+      - name: Collect output
+        env:
+          TICKET: ${{ inputs.ticket }}
         run: |
-          test -f .agent-run/plan.md || { echo "::error::Agent produced no plan.md"; exit 1; }
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "::error::Plan mode must not change tracked files"; git status --short; exit 1
+          if [ -f .agent-run/blocked.md ]; then
+            cp .agent-run/blocked.md .agent-run/out/blocked.md
+            echo "::notice::Agent stopped and asked for a human:"; cat .agent-run/blocked.md
+            exit 0
           fi
-          cp .agent-run/plan.md .agent-run/out/plan.md
 
-      - name: Collect output (code modes)
-        if: inputs.mode != 'plan'
-        run: |
+          if [ "$MODE" = "plan" ]; then
+            test -f .agent-run/plan.md || { echo "::error::Agent produced no plan.md"; exit 1; }
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "::error::Plan mode must not change tracked files"; git status --short; exit 1
+            fi
+            cp .agent-run/plan.md .agent-run/out/plan.md
+            exit 0
+          fi
+
           git add -A
-          git diff --cached --quiet || git commit -m "chore: agent changes for ${{ inputs.ticket }}"
+          git diff --cached --quiet || git commit -m "$TICKET: agent changes"
           base=$(cat .agent-run/out/base_sha)
           git format-patch --binary --stdout "$base"..HEAD > .agent-run/out/agent.patch
           test -s .agent-run/out/agent.patch || { echo "::error::Agent made no changes"; exit 1; }
 
       - name: Keep execution log for cost tracking
         if: always()
-        run: cp "${{ steps.agent.outputs.execution_file }}" .agent-run/out/execution.json || true
+        env:
+          EXECUTION_FILE: ${{ steps.agent.outputs.execution_file }}
+        run: cp "$EXECUTION_FILE" .agent-run/out/execution.json || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: agent-out
@@ -235,19 +250,20 @@ jobs:
       LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
     steps:
       # A GitHub App identity: pushes and PRs made with it DO trigger other
-      # workflows (events made with GITHUB_TOKEN do not).
+      # workflows (events made with GITHUB_TOKEN do not). Give the App no
+      # "Workflows" permission, so agent patches can never change workflow files.
       - id: app
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ vars.AGENT_APP_ID }}
+          client-id: ${{ vars.AGENT_APP_CLIENT_ID }}
           private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ steps.app.outputs.token }}
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -260,17 +276,34 @@ jobs:
           node "$RUNNER_TEMP/factory/linear-report.mjs" --ticket "$TICKET" --kind failed --run-url "$RUN_URL"
           exit 1
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: agent-out
           path: out
 
+      # Hand over to a human: the agent stopped itself, or the guard blocked it.
+      # Writes stop=true so later steps skip.
+      - name: Agent asked for a human
+        id: blocked
+        if: hashFiles('out/blocked.md') != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          echo "stop=true" >> "$GITHUB_OUTPUT"
+          node "$RUNNER_TEMP/factory/linear-report.mjs" --ticket "$TICKET" --kind blocked --file out/blocked.md --run-url "$RUN_URL"
+          if [ "$MODE" = "fix" ]; then
+            gh pr edit "$PR" --remove-label agent-ok --add-label needs-human
+            gh pr merge "$PR" --disable-auto || true
+            { echo "Agent stopped and needs a human:"; echo; cat out/blocked.md; echo; echo "Run: $RUN_URL"; } \
+              | gh pr comment "$PR" --body-file -
+          fi
+
       - name: Post plan to Linear
-        if: inputs.mode == 'plan'
+        if: inputs.mode == 'plan' && steps.blocked.outputs.stop != 'true'
         run: node "$RUNNER_TEMP/factory/linear-report.mjs" --ticket "$TICKET" --kind plan --file out/plan.md --run-url "$RUN_URL"
 
       - name: Apply patch
-        if: inputs.mode != 'plan'
+        if: inputs.mode != 'plan' && steps.blocked.outputs.stop != 'true'
         run: |
           git config user.name "factory-agent[bot]"
           git config user.email "factory-agent@users.noreply.github.com"
@@ -282,25 +315,42 @@ jobs:
           fi
           git am --3way out/agent.patch
 
-      - name: Size guard (small tickets)
+      # Small tickets, and fixes to small-ticket PRs, must stay within the guard.
+      # The guard checks the whole branch against the default branch.
+      - name: Size guard
         id: guard
-        if: inputs.mode == 'small'
+        if: inputs.mode != 'plan' && inputs.mode != 'build' && steps.blocked.outputs.stop != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
+          if [ "$MODE" = "fix" ] && \
+             [ "$(gh pr view "$PR" --json labels --jq '[.labels[].name] | index("agent-ok") != null')" != "true" ]; then
+            echo "PR is not agent-ok; no size guard."; exit 0
+          fi
           if node "$RUNNER_TEMP/factory/size-guard.mjs" --mode small --base "origin/$DEFAULT_BRANCH" > guard.txt 2>&1; then
-            echo "blocked=false" >> "$GITHUB_OUTPUT"
-          else
-            cat guard.txt
-            echo "blocked=true" >> "$GITHUB_OUTPUT"
-            node "$RUNNER_TEMP/factory/linear-report.mjs" --ticket "$TICKET" --kind needs-human --file guard.txt --run-url "$RUN_URL"
+            cat guard.txt; exit 0
+          fi
+          cat guard.txt
+          echo "stop=true" >> "$GITHUB_OUTPUT"
+          node "$RUNNER_TEMP/factory/linear-report.mjs" --ticket "$TICKET" --kind needs-human --file guard.txt --run-url "$RUN_URL"
+          if [ "$MODE" = "fix" ]; then
+            gh pr edit "$PR" --remove-label agent-ok --add-label needs-human
+            gh pr merge "$PR" --disable-auto || true
+            { echo "Agent fix was not pushed: it would break the small-ticket guard."; echo; echo '```'; cat guard.txt; echo '```'; } \
+              | gh pr comment "$PR" --body-file -
           fi
 
       - name: Push branch
-        if: inputs.mode != 'plan' && steps.guard.outputs.blocked != 'true'
+        if: >-
+          inputs.mode != 'plan' &&
+          steps.blocked.outputs.stop != 'true' && steps.guard.outputs.stop != 'true'
         run: git push origin "HEAD:refs/heads/$BRANCH"
 
       - name: Open PR
         id: pr
-        if: inputs.mode != 'plan' && inputs.mode != 'fix' && steps.guard.outputs.blocked != 'true'
+        if: >-
+          (inputs.mode == 'small' || inputs.mode == 'build') &&
+          steps.blocked.outputs.stop != 'true' && steps.guard.outputs.stop != 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
@@ -320,10 +370,14 @@ jobs:
 
       - name: Report PR to Linear
         if: steps.pr.outputs.url != ''
-        run: node "$RUNNER_TEMP/factory/linear-report.mjs" --ticket "$TICKET" --kind pr --url "${{ steps.pr.outputs.url }}" --run-url "$RUN_URL"
+        env:
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: node "$RUNNER_TEMP/factory/linear-report.mjs" --ticket "$TICKET" --kind pr --url "$PR_URL" --run-url "$RUN_URL"
 
       - name: Comment on PR (fix mode)
-        if: inputs.mode == 'fix'
+        if: >-
+          inputs.mode == 'fix' &&
+          steps.blocked.outputs.stop != 'true' && steps.guard.outputs.stop != 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |

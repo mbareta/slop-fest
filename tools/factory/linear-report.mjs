@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // Posts an agent-run update to the Linear ticket.
 //
-//   node linear-report.mjs --ticket ENG-123 --kind plan|pr|failed|needs-human \
+//   node linear-report.mjs --ticket ENG-123 --kind plan|pr|failed|needs-human|blocked \
 //     [--file path] [--url <pr url>] --run-url <url>
 //
 // plan        : posts the plan (--file) for the product owner to approve
 // pr          : posts the PR link (--url)
 // failed      : the agent run failed
-// needs-human : the guard blocked the change (--file has the reasons); also adds
-//               the `needs-human` label to the ticket if the workspace has one
+// blocked     : the agent stopped itself (--file is its blocked.md)
+// needs-human : the guard blocked the change (--file has the reasons)
+//               Both also add the `needs-human` label to the ticket if the
+//               workspace has one
 //
 // Env: LINEAR_API_KEY, TEAM_KEY.
 import { readFileSync } from 'node:fs';
@@ -49,6 +51,9 @@ switch (args.kind) {
   case 'needs-human':
     body = `Agent change was blocked by the small-ticket guard and needs a human:\n\n\`\`\`\n${readFile()}\n\`\`\`${run}`;
     break;
+  case 'blocked':
+    body = `Agent stopped and needs a human:\n\n${readFile()}${run}`;
+    break;
   default:
     fail(`Invalid --kind: ${args.kind}`, 2);
 }
@@ -57,7 +62,7 @@ const { issue } = await linear(`query($id: String!) { issue(id: $id) { id } }`, 
 if (!issue) fail(`Ticket not found: ${ticket}`);
 await addComment(issue.id, body);
 
-if (args.kind === 'needs-human') {
+if (args.kind === 'needs-human' || args.kind === 'blocked') {
   try {
     const { issueLabels } = await linear(
       `query { issueLabels(first: 1, filter: { name: { eq: "needs-human" } }) { nodes { id } } }`,
