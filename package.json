@@ -7,9 +7,22 @@
     "node": ">=24"
   },
   "scripts": {
-    "typecheck": "echo 'typecheck: no TypeScript packages yet (added with the app skeleton)'",
-    "lint": "echo 'lint: no linter configured yet (added with the app skeleton)'",
-    "e2e": "echo 'e2e: no journeys yet (Playwright harness comes after the app skeleton)'",
+    "dev": "pnpm --filter @slop/web dev",
+    "typecheck": "pnpm -r --if-present typecheck && tsc -p e2e",
+    "lint": "eslint .",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "db:migrate": "pnpm --filter @slop/db migrate",
+    "db:generate": "pnpm --filter @slop/db generate",
     "factory:test": "node --test 'tools/factory/test/*.test.mjs'"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "^16.4.6",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2"
   }
 }

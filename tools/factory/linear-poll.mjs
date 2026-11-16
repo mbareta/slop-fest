@@ -2,7 +2,7 @@
 // Prints a JSON array of ticket IDs that are ready for an autonomous run:
 // team TEAM_KEY, label `agent-ok`, state Todo. Highest priority first, then oldest.
 //
-//   node linear-poll.mjs --limit 2      ->  ["ENG-12","ENG-15"]
+//   node linear-poll.mjs --limit 2      ->  ["STU-12","STU-15"]
 import { parseArgs } from 'node:util';
 import { STATES, fail, linear, teamKey } from './lib.mjs';
 

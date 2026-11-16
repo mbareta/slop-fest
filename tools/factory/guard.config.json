@@ -18,6 +18,7 @@
       "CLAUDE.md",
       "apps/web/src/auth/**",
       "apps/web/src/middleware.ts",
+      "apps/web/src/proxy.ts",
       "packages/db/**",
       "e2e/support/**",
       "**/package.json",

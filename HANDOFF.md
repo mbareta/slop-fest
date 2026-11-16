@@ -6,7 +6,7 @@ Context: this repo is a new prototype that aggregates data from multiple sources
 CEO (reads Linear and a weekly digest only), product owner (writes tickets, sets size, approves plans), engineer (prompts for large tickets, reviews PRs, owns gates), QA (acceptance scenarios, bug reports, no routine manual testing). Agents turn tickets into PRs.
 
 ## Decisions
-- Node.js and TypeScript everywhere. Monorepo: `apps/web` (Next.js dashboard + API), `apps/workers` (ingestion), `packages/connectors/*` (each exposes `auth`, `fetch`, `normalize`), `infra/`, `e2e/`, `docs/`, `tools/factory/`, `.github/`, `.circleci/`, `CLAUDE.md`.
+- Node.js and TypeScript everywhere. Monorepo: `apps/web` (Next.js dashboard + API), `apps/workers` (ingestion), `packages/db` (Drizzle schema, migrations, `forTenant()`), `packages/connectors/*` (each exposes `auth`, `fetch`, `normalize`), `infra/`, `e2e/`, `docs/`, `tools/factory/`, `.github/`, `.circleci/`, `CLAUDE.md`.
 - Tickets in Linear, code in GitHub (Linear GitHub integration, GitHub Issues sync OFF). Branch names and PR titles must contain the Linear ID.
 - AWS, production only (no staging). Infra with Pulumi using https://github.com/ExtensionEngine/infra-code-blocks (Vpc, Database, WebServer, EcsService). Check Vpc NAT gateway defaults for cost before the first deploy.
 - Postgres, with pg-boss as the job queue (no Redis initially). S3 landing zone for raw ingested payloads. Secrets Manager for tenant credentials. OTel to Grafana.
@@ -19,24 +19,62 @@ CEO (reads Linear and a weekly digest only), product owner (writes tickets, sets
 - Agent runs in GitHub Actions via `anthropics/claude-code-action@v1` (verify inputs against its current README). Ticket text is untrusted input. Credentials are split across jobs: prepare (Linear key), agent (Anthropic key, read-only repo token), publish (GitHub App token). The agent never talks to Linear directly; scripts do.
 - Small tickets use a cheaper model, large tickets the strongest model. Per-run max turns, daily run cap, 2 fix attempts then `needs-human`.
 
-## Already written (drafts, never run)
-Five workflows in `.github/workflows/`: `ci.yml`, `agent-poll.yml`, `agent-run.yml`, `agent-fix.yml`, `automerge.yml`.
+## Status (2026-11-16)
 
-## To write next
-1. Guardrails: branch protection (required checks: `checks` + CircleCI jobs), CODEOWNERS, labels (`agent-ok`, `agent-authored`, `needs-human`, `agent-fix-1`, `agent-fix-2`), GitHub App for the agent, repo variables/secrets (see workflow headers: `AGENTS_ENABLED`, `AUTOMERGE_ENABLED`, `LINEAR_TEAM_KEY`, `AGENT_APP_CLIENT_ID`, `AGENT_APP_SLUG`; secrets `ANTHROPIC_API_KEY`, `LINEAR_API_KEY`, `AGENT_APP_PRIVATE_KEY`).
-2. `tools/factory/` (plain Node ESM, zero dependencies, built-in fetch):
-   - `linear-poll.mjs`: print JSON array of eligible ticket IDs (label `agent-ok`, state Todo).
-   - `linear-claim.mjs`: claim ticket (Todo to In Progress, comment run link), write `.agent-run/ticket.md`; step outputs `skipped`, `branch`, `base_ref`, `title`, `url`; in fix mode fetch the failed run's log instead.
-   - `linear-report.mjs`: post plan / PR link / failed / needs-human comments to Linear.
-   - `size-guard.mjs` + `guard.config.json`: path allowlist and diff cap (about 200 lines, 5 files), exit non-zero on violation; supports `--files-json` and `--base`.
-   - `docs-check.mjs`: touching an integration requires touching its doc.
-   - `run-cost.mjs`: summarize cost from the execution log.
-3. Agent prompts: `.github/agent/prompts/{small,plan,build,fix}.md`.
-4. `CLAUDE.md` v1 (short: layout, commands, tenant rule, doc rule, protected paths), Linear ticket and bug templates, PR template, `.nvmrc`.
-5. App skeleton and deploy path (hello world through the full pipeline), then the test harness, then a walking skeleton built by agents under human review.
+### Done
+- **Repo foundation** (on `main`): `CLAUDE.md`, `.nvmrc` (24), `.gitignore`, `.env.example`, CODEOWNERS, PR template, Linear ticket and bug templates (`docs/templates/`), `docs/journeys.md`.
+- **`tools/factory/`** (on `main`): `lib.mjs`, `linear-poll.mjs`, `linear-claim.mjs`, `linear-report.mjs`, `size-guard.mjs` + `guard.config.json` (small path: 5 files, 200 lines, allow/deny globs), `docs-check.mjs`, `run-cost.mjs`. Unit tests for the guard and docs check: `pnpm factory:test`.
+- **Agent prompts** (on `main`): `.github/agent/prompts/{rules,small,plan,build,fix}.md`. Agents stop by writing `.agent-run/blocked.md` with a clean tree.
+- **Workflows hardened** (on `main`): every action pinned to a commit SHA; `claude-code-action` inputs verified against v1.0.276 and run with `--permission-mode default`; the App token comes from `create-github-app-token` with `client-id`; no `${{ }}` inside shell; a hand-off to `needs-human` also disables auto-merge.
+- **GitHub setup:**
+  - repo is public (rulesets need it on the free plan);
+  - labels created;
+  - GitHub App `slop-fest-agent` installed;
+  - secrets `ANTHROPIC_API_KEY`, `LINEAR_API_KEY` and `AGENT_APP_PRIVATE_KEY` set;
+  - variables: `AGENTS_ENABLED=false`, `AUTOMERGE_ENABLED=false`, `LINEAR_TEAM_KEY=STU`, `AGENT_APP_CLIENT_ID`, `AGENT_APP_SLUG`. The other vars (`AGENT_DAILY_CAP`, `AGENT_MAX_PER_POLL`, `AGENT_MAX_TURNS_*`, `AGENT_MODEL_*`, `AUTOMERGE_DAILY_CAP`) fall back to defaults in the workflows.
+- **Ruleset "main protection":**
+  - required check `checks` (GitHub Actions), squash merges only, code-owner review required, stale approvals dismissed, 0 required approvals;
+  - no deletion or force-push;
+  - repo admins can bypass through a PR.
+- **Linear:**
+  - team key `STU`;
+  - labels `agent-ok` and `needs-human`;
+  - GitHub integration on.
+- **STU-6 app skeleton** (PR #1):
+  - pnpm workspaces, TypeScript 6, ESLint 10 flat config;
+  - `apps/web`: Next.js 16 App Router, `/api/health` checks the DB;
+  - `apps/workers`: pg-boss, queue `sync`;
+  - `packages/db` (`@slop/db`): Drizzle schema (`tenants`, `connections`), migrations, `forTenant()`;
+  - Playwright `health` journey;
+  - CI runs policy, static (typecheck, lint, factory tests) and e2e against Postgres 16, all green.
+
+### Decided since planning
+- Database layer: Drizzle ORM on `pg`. Lint: ESLint with typescript-eslint and the Next plugin.
+- Node runs TypeScript directly (type stripping): relative imports use `.ts`, no enums or other non-erasable syntax.
+- Keep Next.js for now. Express 5 + Vue 3 was considered: a small swap, best done before much UI exists, and NestJS was ruled out because its decorators need a build step.
+- Customer auth stays out of the skeleton; the E2E sign-in seam ships with the test harness.
+- Deploy is on hold until there is something to show.
+
+### Next
+1. **Test harness** (new Linear ticket; touches protected paths, so a human-steered session merged with the admin bypass):
+   - `E2E_MODE` sign-in seam in `e2e/support/sign-in.ts` that refuses to boot in production; with no customer auth yet, it signs in to a minimal session stub that real auth replaces later;
+   - per-test seeding of one tenant through `forTenant`;
+   - fixture HTTP server for connectors (`SOURCE_API_URL`) and a `runSync()` helper;
+   - the permanent two-tenant isolation journey (row already in `docs/journeys.md`).
+2. **Walking skeleton** built by agents under human review, starting with plan/build mode, then small tickets with `AGENTS_ENABLED=true`.
+3. **CircleCI security orb**: add `.circleci/config.yml`, then add its checks to the ruleset as required.
+4. **Deploy PR** (on hold): needs a Linear ticket, AWS account and region, a GitHub OIDC IAM role, a Pulumi org and `PULUMI_ACCESS_TOKEN`, a domain, and where deploys run.
+5. After about 10 human-reviewed agent PRs: set `AUTOMERGE_ENABLED=true`. Weekly digest still to write.
+6. Optional: actionlint in CI.
 
 ## Open questions
-Integration auth model (tenant OAuth vs API keys; design connectors to support both), auth provider, Pulumi state backend (default Pulumi Cloud), whether the orb's build can run without pushing, whether each CircleCI job reports as its own GitHub check, PR pipeline time budget, whether agents get a CircleCI token, Linear team key, first integrations and reports.
-
-## Things to verify in the workflow drafts
-`claude-code-action` input/output names, `--allowedTools` pattern syntax, pin actions to SHAs, approving-review requirement vs auto-merge, CircleCI failures not visible to `agent-fix.yml`.
+- Integration auth model: tenant OAuth or API keys. Design connectors to support both.
+- Auth provider: Clerk or WorkOS.
+- Pulumi state backend: Pulumi Cloud by default.
+- CircleCI:
+  - whether the orb's build can run without pushing;
+  - whether each job reports as its own GitHub check;
+  - whether agents get a CircleCI token;
+  - CircleCI failures don't trigger `agent-fix.yml`.
+- PR pipeline time budget.
+- First integrations and reports.

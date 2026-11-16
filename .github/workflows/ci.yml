@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  TEAM_KEY: ${{ vars.LINEAR_TEAM_KEY || 'ENG' }}
+  TEAM_KEY: ${{ vars.LINEAR_TEAM_KEY || 'STU' }}
 
 jobs:
   # Policy checks run scripts from the BASE branch (never from the PR), so a PR

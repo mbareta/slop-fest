@@ -6,7 +6,7 @@ name: Agent run
 #   build - large ticket after the plan is approved (human-triggered)
 #   fix   - repair a failing agent PR (started by agent-fix)
 #
-# Human trigger:  gh workflow run agent-run.yml -f ticket=ENG-123 -f mode=plan
+# Human trigger:  gh workflow run agent-run.yml -f ticket=STU-123 -f mode=plan
 #
 # Credential separation (the ticket text is untrusted input):
 #   prepare : LINEAR_API_KEY            - reads/claims the ticket, no AI
@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       ticket:
-        description: 'Linear issue ID, e.g. ENG-123'
+        description: 'Linear issue ID, e.g. STU-123'
         required: true
         type: string
       mode:
@@ -45,7 +45,7 @@ permissions:
   contents: read
 
 env:
-  TEAM_KEY: ${{ vars.LINEAR_TEAM_KEY || 'ENG' }}
+  TEAM_KEY: ${{ vars.LINEAR_TEAM_KEY || 'STU' }}
 
 jobs:
   prepare:

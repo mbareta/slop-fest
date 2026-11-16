@@ -12,7 +12,8 @@ enforces them, and a change that goes over is handed to a human instead.
 - **Only these paths:** `apps/web/**`, `apps/workers/**`, `packages/connectors/**`,
   `e2e/journeys/**`, `e2e/fixtures/**`, `docs/**`.
 - **Never these paths**, even inside the allowed ones: auth code
-  (`apps/web/src/auth/**`, `apps/web/src/middleware.ts`), `packages/db/**`
+  (`apps/web/src/auth/**`, `apps/web/src/middleware.ts`,
+  `apps/web/src/proxy.ts`), `packages/db/**`
   (data-access helper and migrations), `e2e/support/**`, any `package.json`,
   lockfiles, `.env*` files, `CLAUDE.md`.
 - No binary files and no renames out of protected paths.
