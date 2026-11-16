@@ -1,0 +1,37 @@
+{
+  "small": {
+    "maxFiles": 5,
+    "maxLines": 200,
+    "allow": [
+      "apps/web/**",
+      "apps/workers/**",
+      "packages/connectors/**",
+      "e2e/journeys/**",
+      "e2e/fixtures/**",
+      "docs/**"
+    ],
+    "deny": [
+      ".github/**",
+      ".circleci/**",
+      "tools/factory/**",
+      "infra/**",
+      "CLAUDE.md",
+      "apps/web/src/auth/**",
+      "apps/web/src/middleware.ts",
+      "packages/db/**",
+      "e2e/support/**",
+      "**/package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      ".nvmrc",
+      "**/.env",
+      "**/.env.*"
+    ]
+  },
+  "docs": [
+    {
+      "source": "packages/connectors/{name}/**",
+      "doc": "docs/integrations/{name}.md"
+    }
+  ]
+}

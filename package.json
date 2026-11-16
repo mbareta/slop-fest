@@ -9,6 +9,7 @@
   "scripts": {
     "typecheck": "echo 'typecheck: no TypeScript packages yet (added with the app skeleton)'",
     "lint": "echo 'lint: no linter configured yet (added with the app skeleton)'",
-    "e2e": "echo 'e2e: no journeys yet (Playwright harness comes after the app skeleton)'"
+    "e2e": "echo 'e2e: no journeys yet (Playwright harness comes after the app skeleton)'",
+    "factory:test": "node --test 'tools/factory/test/*.test.mjs'"
   }
 }
