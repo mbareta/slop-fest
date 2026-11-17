@@ -6,6 +6,7 @@ Happy path only, unless QA asks for edge or regression cases.
 | ID | Journey | Spec |
 |----|---------|------|
 | health | The app boots, renders the home page and reaches its database | `e2e/journeys/health.spec.ts` |
+| sign-in | A signed-in user sees which tenant they are in | `e2e/journeys/sign-in.spec.ts` |
 | tenant-isolation | Two tenants never see each other's data (permanent) | added with the test harness (sign-in seam, seeding, fixture server) |
 
 <!-- Add a row when a ticket introduces a new journey. -->

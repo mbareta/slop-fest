@@ -17,9 +17,15 @@ importers:
       '@playwright/test':
         specifier: ^1.65.1
         version: 1.65.1
+      '@slop/db':
+        specifier: workspace:*
+        version: link:packages/db
       '@types/node':
         specifier: ^24.19.2
         version: 24.19.2
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@opentelemetry/api@1.10.0)(@types/pg@8.23.1)(pg@8.23.1)
       eslint:
         specifier: ^10.15.0
         version: 10.15.0
